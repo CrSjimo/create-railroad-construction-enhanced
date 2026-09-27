@@ -1,20 +1,32 @@
 package dev.sjimo.rrce.client;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import com.simibubi.create.AllBlocks;
 import com.simibubi.create.content.trains.track.TrackBlock;
+import com.simibubi.create.content.trains.track.TrackBlockEntity;
+import com.simibubi.create.content.trains.track.TrackMaterial;
 import com.simibubi.create.content.trains.track.TrackShape;
+import com.simibubi.create.content.trains.track.BezierConnection;
 import com.simibubi.create.foundation.ponder.PonderPalette;
 import com.simibubi.create.foundation.ponder.PonderRegistrationHelper;
 import com.simibubi.create.foundation.ponder.SceneBuilder;
 import com.simibubi.create.foundation.ponder.SceneBuildingUtil;
 import com.simibubi.create.foundation.ponder.element.InputWindowElement;
 import com.simibubi.create.foundation.utility.Pointing;
+import com.simibubi.create.foundation.utility.Couple;
 import dev.sjimo.rrce.ConstructionConfig;
 import dev.sjimo.rrce.RrceMod;
+import dev.sjimo.rrce.world.RoadbedGeometry;
+import dev.sjimo.rrce.world.TrackHeading;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.nbt.ListTag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.Vec3;
 
 /** Ponder lessons with a dedicated empty stage; each structure is built during its scene. */
 public final class RrcePonder {
@@ -30,6 +42,7 @@ public final class RrcePonder {
         helper.addStoryBoard(plan, STAGE, RrcePonder::plan);
         helper.addStoryBoard(plan, STAGE, RrcePonder::cut);
         helper.addStoryBoard(plan, STAGE, RrcePonder::tunnel);
+        helper.addStoryBoard(plan, STAGE, RrcePonder::quickRoutes);
     }
 
     private static void stage(SceneBuilder scene, float scale) {
@@ -231,5 +244,106 @@ public final class RrcePonder {
         scene.overlay.showText(85).pointAt(util.vector.topOf(11, 1, 7)).placeNearTarget()
             .text("The plan controls clearance, wall thickness and wall material. Server terrain rules decide what may be dug.");
         scene.idle(85);
+    }
+
+    private static void quickRoutes(SceneBuilder scene, SceneBuildingUtil util) {
+        scene.title("quick_routes", "Extending a Surveyed Route");
+        stage(scene, .59f);
+        var target = util.vector.topOf(5, 2, 6);
+        scene.overlay.showText(75).pointAt(target).placeNearTarget().colored(PonderPalette.GREEN)
+            .text("Select a rail end. A quick planning tool adds the next end along its forward direction.");
+        scene.overlay.showControls(new InputWindowElement(target, Pointing.DOWN).rightClick()
+            .withItem(RrceMod.QUICK_CURVE.getDefaultInstance()), 55);
+        quickPath(scene, util, new BlockPos(2, 2, 5), TrackHeading.EAST,
+            new BlockPos(12, 2, 8), TrackHeading.EAST);
+        scene.idle(75);
+
+        scene.addKeyframe();
+        scene.overlay.showText(75).pointAt(target).placeNearTarget()
+            .text("The curve tool shifts the route sideways. Sneak-right-click to adjust its reach and offset.");
+        scene.overlay.showControls(new InputWindowElement(target, Pointing.DOWN).rightClick().whileSneaking()
+            .withItem(RrceMod.QUICK_CURVE.getDefaultInstance()), 55);
+        scene.idle(75);
+
+        scene.addKeyframe();
+        hideQuickPath(scene, util);
+        quickPath(scene, util, new BlockPos(2, 2, 6), TrackHeading.EAST,
+            new BlockPos(12, 4, 6), TrackHeading.EAST);
+        scene.overlay.showText(85).pointAt(util.vector.topOf(9, 4, 6)).placeNearTarget()
+            .text("The slope tool raises or lowers the next rail end while keeping the route straight.");
+        scene.overlay.showControls(new InputWindowElement(target, Pointing.DOWN).rightClick()
+            .withItem(RrceMod.QUICK_SLOPE.getDefaultInstance()), 55);
+        scene.idle(85);
+
+        scene.addKeyframe();
+        hideQuickPath(scene, util);
+        quickPath(scene, util, new BlockPos(2, 2, 4), TrackHeading.EAST,
+            new BlockPos(12, 2, 8), TrackHeading.SOUTH_EAST);
+        scene.overlay.showText(85).pointAt(util.vector.topOf(8, 2, 8)).placeNearTarget()
+            .text("The 45-degree tool turns the next rail end by one direction step.");
+        scene.overlay.showControls(new InputWindowElement(target, Pointing.DOWN).rightClick()
+            .withItem(RrceMod.QUICK_TURN_45.getDefaultInstance()), 55);
+        scene.idle(85);
+
+        scene.addKeyframe();
+        hideQuickPath(scene, util);
+        quickPath(scene, util, new BlockPos(2, 2, 3), TrackHeading.EAST,
+            new BlockPos(12, 2, 13), TrackHeading.SOUTH);
+        scene.overlay.showText(90).pointAt(util.vector.topOf(9, 2, 9)).placeNearTarget()
+            .text("The 90-degree tool turns by two steps. Set the signed radius to choose left or right.");
+        scene.overlay.showControls(new InputWindowElement(target, Pointing.DOWN).rightClick()
+            .withItem(RrceMod.QUICK_TURN_90.getDefaultInstance()), 55);
+        scene.idle(90);
+    }
+
+    private static void hideQuickPath(SceneBuilder scene, SceneBuildingUtil util) {
+        scene.world.hideSection(util.select.fromTo(1, 1, 1, 13, 5, 13), Direction.DOWN);
+        scene.idle(20);
+    }
+
+    /** Use Create's real connection data, rather than a row of disconnected track blocks. */
+    private static void quickPath(SceneBuilder scene, SceneBuildingUtil util, BlockPos first,
+                                  TrackHeading firstHeading, BlockPos last, TrackHeading lastHeading) {
+        scene.world.setBlocks(util.select.fromTo(1, 1, 1, 13, 5, 13), Blocks.AIR.defaultBlockState(), false);
+        Vec3 a = firstHeading.vector(), b = lastHeading.vector();
+        BezierConnection connection = new BezierConnection(Couple.create(first, last),
+            Couple.create(curveStart(first, firstHeading.rawAxis()),
+                curveStart(last, lastHeading.rawAxis().scale(-1))),
+            Couple.create(a, b.scale(-1)),
+            Couple.create(new Vec3(0, 1, 0), new Vec3(0, 1, 0)),
+            true, false, TrackMaterial.ANDESITE);
+        ConstructionConfig roadbed = new ConstructionConfig();
+        roadbed.resizeLines(1);
+        roadbed.edgeMargin = 1;
+        List<RoadbedGeometry.Sample> samples = new ArrayList<>();
+        RoadbedGeometry.addCurveSamples(samples, first, a, connection, last, b, 0);
+        RoadbedGeometry.foundationLayout(samples, roadbed, 1).blocks()
+            .forEach((position, state) -> scene.world.setBlock(position, state, false));
+        scene.world.setBlock(first, track(firstHeading), false);
+        scene.world.setBlock(last, track(lastHeading), false);
+        scene.world.modifyBlockEntityNBT(util.select.position(first), TrackBlockEntity.class, tag -> {
+            ListTag curves = new ListTag();
+            curves.add(connection.write(first));
+            tag.put("Connections", curves);
+        }, true);
+        scene.world.modifyBlockEntityNBT(util.select.position(last), TrackBlockEntity.class, tag -> {
+            ListTag curves = new ListTag();
+            curves.add(connection.secondary().write(last));
+            tag.put("Connections", curves);
+        }, true);
+        scene.world.showSection(util.select.fromTo(1, 1, 1, 13, 5, 13), Direction.UP);
+        scene.idle(18);
+    }
+
+    private static Vec3 curveStart(BlockPos point, Vec3 outward) {
+        return Vec3.atCenterOf(point).add(0, -.5, 0).add(outward.scale(.5));
+    }
+
+    private static BlockState track(TrackHeading heading) {
+        TrackShape shape = heading.dx == 0 ? TrackShape.ZO : heading.dz == 0 ? TrackShape.XO
+            : heading.dx == heading.dz ? TrackShape.PD : TrackShape.ND;
+        // Ponder can only load and render Bezier connections from a real track block entity.
+        return AllBlocks.TRACK.getDefaultState().setValue(TrackBlock.SHAPE, shape)
+            .setValue(TrackBlock.HAS_BE, true);
     }
 }

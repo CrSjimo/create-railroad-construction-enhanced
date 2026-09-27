@@ -27,8 +27,10 @@ abstract class ControlPointTool extends Item {
     }
 
     public final InteractionResult useAt(Player usingPlayer, Level level, BlockPos clicked, Direction face) {
+        if (usingPlayer == null || usingPlayer.isSpectator()) return InteractionResult.FAIL;
+        if (!ToolPress.claim(usingPlayer, level)) return InteractionResult.CONSUME;
         if (level.isClientSide) return InteractionResult.SUCCESS;
-        if (!(usingPlayer instanceof ServerPlayer player) || player.isSpectator()) return InteractionResult.FAIL;
+        if (!(usingPlayer instanceof ServerPlayer player)) return InteractionResult.FAIL;
         try {
             perform(player, level, clicked, face);
             if (changesRoute()) RrceMod.syncPointEdit(player, removesPoint());

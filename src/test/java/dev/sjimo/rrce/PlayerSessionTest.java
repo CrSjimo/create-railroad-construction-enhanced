@@ -72,4 +72,12 @@ final class PlayerSessionTest {
         assertFalse(session.restorePointsAfterUndo());
         assertEquals(0, session.selectedPoint);
     }
+
+    @Test void oneToolActionIsAcceptedUntilTheUseKeyIsReleased() {
+        PlayerSession session = new PlayerSession();
+        assertTrue(session.claimToolPress());
+        assertFalse(session.claimToolPress());
+        session.releaseToolPress();
+        assertTrue(session.claimToolPress());
+    }
 }

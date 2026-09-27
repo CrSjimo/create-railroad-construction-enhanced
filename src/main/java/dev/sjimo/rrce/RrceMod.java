@@ -45,12 +45,18 @@ public final class RrceMod implements ModInitializer {
     public static final ResourceLocation CONFIG_SYNC = new ResourceLocation(ID, "config_sync");
     public static final ResourceLocation PREVIEW_SYNC = new ResourceLocation(ID, "preview_sync");
     public static final ResourceLocation ACTION_PACKET = new ResourceLocation(ID, "action");
+    public static final ResourceLocation QUICK_CONFIG_PACKET = new ResourceLocation(ID, "quick_config");
+    public static final ResourceLocation TOOL_RELEASE_PACKET = new ResourceLocation(ID, "tool_release");
     public static final Item TOOL = new ConstructionTool(new Item.Properties().stacksTo(1));
     public static final Item PLAN = new ConstructionPlanItem(new Item.Properties().stacksTo(1));
     public static final Item DIRECTION = new DirectionTool(new Item.Properties().stacksTo(1));
     public static final Item SELECT = new SelectPointTool(new Item.Properties().stacksTo(1));
     public static final Item MOVE = new MovePointTool(new Item.Properties().stacksTo(1));
     public static final Item REMOVE = new RemovePointTool(new Item.Properties().stacksTo(1));
+    public static final Item QUICK_CURVE = new QuickRouteTool(QuickRouteGeometry.Kind.CURVE, new Item.Properties().stacksTo(1));
+    public static final Item QUICK_SLOPE = new QuickRouteTool(QuickRouteGeometry.Kind.SLOPE, new Item.Properties().stacksTo(1));
+    public static final Item QUICK_TURN_45 = new QuickRouteTool(QuickRouteGeometry.Kind.TURN_45, new Item.Properties().stacksTo(1));
+    public static final Item QUICK_TURN_90 = new QuickRouteTool(QuickRouteGeometry.Kind.TURN_90, new Item.Properties().stacksTo(1));
     private int ticks;
 
     @Override
@@ -61,12 +67,18 @@ public final class RrceMod implements ModInitializer {
         net.minecraft.core.Registry.register(BuiltInRegistries.ITEM, new ResourceLocation(ID, "control_point_select_tool"), SELECT);
         net.minecraft.core.Registry.register(BuiltInRegistries.ITEM, new ResourceLocation(ID, "control_point_move_tool"), MOVE);
         net.minecraft.core.Registry.register(BuiltInRegistries.ITEM, new ResourceLocation(ID, "control_point_remove_tool"), REMOVE);
+        net.minecraft.core.Registry.register(BuiltInRegistries.ITEM, new ResourceLocation(ID, "quick_curve_tool"), QUICK_CURVE);
+        net.minecraft.core.Registry.register(BuiltInRegistries.ITEM, new ResourceLocation(ID, "quick_slope_tool"), QUICK_SLOPE);
+        net.minecraft.core.Registry.register(BuiltInRegistries.ITEM, new ResourceLocation(ID, "quick_turn_45_tool"), QUICK_TURN_45);
+        net.minecraft.core.Registry.register(BuiltInRegistries.ITEM, new ResourceLocation(ID, "quick_turn_90_tool"), QUICK_TURN_90);
         net.minecraft.core.Registry.register(BuiltInRegistries.CREATIVE_MODE_TAB, new ResourceLocation(ID, "construction"),
             FabricItemGroup.builder().icon(PLAN::getDefaultInstance)
                 .title(Component.translatable("itemGroup.rrce.construction"))
                 .displayItems((context, entries) -> {
                     entries.accept(PLAN); entries.accept(TOOL); entries.accept(SELECT);
                     entries.accept(MOVE); entries.accept(DIRECTION); entries.accept(REMOVE);
+                    entries.accept(QUICK_CURVE); entries.accept(QUICK_SLOPE);
+                    entries.accept(QUICK_TURN_45); entries.accept(QUICK_TURN_90);
                 }).build());
         UseBlockCallback.EVENT.register((player, world, hand, hit) -> {
             if (hand != InteractionHand.MAIN_HAND) return InteractionResult.PASS;
@@ -80,7 +92,10 @@ public final class RrceMod implements ModInitializer {
                 return ((RemovePointTool) REMOVE).useAt(player, world, hit.getBlockPos(), hit.getDirection());
             if (player.getItemInHand(hand).is(DIRECTION))
                 return ((DirectionTool) DIRECTION).rotate(player, world);
+            if (player.getItemInHand(hand).getItem() instanceof QuickRouteTool quick)
+                return quick.useAt(player, world, hand);
             if (player.getItemInHand(hand).is(PLAN)) {
+                if (!ToolPress.claim(player, world)) return InteractionResult.CONSUME;
                 if (world.isClientSide) dev.sjimo.rrce.client.RrceClient.openScreen();
                 return InteractionResult.sidedSuccess(world.isClientSide);
             }
@@ -93,6 +108,8 @@ public final class RrceMod implements ModInitializer {
             sync(player);
         });
         ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> SessionManager.disconnected(handler.player.getUUID()));
+        ServerPlayNetworking.registerGlobalReceiver(TOOL_RELEASE_PACKET, (server, player, handler, buf, sender) ->
+            server.execute(() -> SessionManager.get(player.getUUID()).releaseToolPress()));
         ServerEntityWorldChangeEvents.AFTER_PLAYER_CHANGE_WORLD.register((player, origin, destination) -> {
             PlayerSession session = SessionManager.get(player.getUUID());
             session.points.clear();
@@ -140,6 +157,26 @@ public final class RrceMod implements ModInitializer {
                 catch (RuntimeException error) {
                     RrceSounds.deny(player);
                     if (!(error instanceof UserFacingException)) LOGGER.warn("Railway action failed", error);
+                    player.sendSystemMessage(Component.translatable("message.rrce.operation_failed",
+                        UserFacingException.display(error)));
+                }
+            });
+        });
+        ServerPlayNetworking.registerGlobalReceiver(QUICK_CONFIG_PACKET, (server, player, handler, buf, responseSender) -> {
+            String kindId = buf.readUtf(32);
+            double first = buf.readDouble();
+            double second = buf.readDouble();
+            server.execute(() -> {
+                try {
+                    if (player.isSpectator() || !(player.getMainHandItem().getItem() instanceof QuickRouteTool tool)
+                        || !tool.kind.id.equals(kindId))
+                        throw new UserFacingException("error.rrce.quick_tool_required");
+                    QuickRouteTool.save(player.getMainHandItem(), tool.kind,
+                        new QuickRouteGeometry.Settings(first, second));
+                    player.sendSystemMessage(Component.translatable("message.rrce.quick_settings_saved"));
+                } catch (RuntimeException error) {
+                    RrceSounds.deny(player);
+                    if (!(error instanceof UserFacingException)) LOGGER.warn("Quick route settings failed", error);
                     player.sendSystemMessage(Component.translatable("message.rrce.operation_failed",
                         UserFacingException.display(error)));
                 }
@@ -309,7 +346,8 @@ public final class RrceMod implements ModInitializer {
         return !player.isSpectator() && (player.hasPermissions(2) || player.getMainHandItem().is(TOOL)
             || player.getMainHandItem().is(PLAN) || player.getMainHandItem().is(DIRECTION)
             || player.getMainHandItem().is(SELECT) || player.getMainHandItem().is(MOVE)
-            || player.getMainHandItem().is(REMOVE));
+            || player.getMainHandItem().is(REMOVE)
+            || player.getMainHandItem().getItem() instanceof QuickRouteTool);
     }
 
     public static void validatePointPosition(ServerPlayer player, BlockPos position) {
@@ -530,6 +568,7 @@ public final class RrceMod implements ModInitializer {
 
     private static boolean isConstructionItem(net.minecraft.world.item.ItemStack stack) {
         return stack.is(TOOL) || stack.is(PLAN) || stack.is(DIRECTION)
-            || stack.is(SELECT) || stack.is(MOVE) || stack.is(REMOVE);
+            || stack.is(SELECT) || stack.is(MOVE) || stack.is(REMOVE)
+            || stack.getItem() instanceof QuickRouteTool;
     }
 }

@@ -20,6 +20,7 @@ import dev.sjimo.rrce.world.TrackHeading;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
 import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents;
 import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
@@ -47,6 +48,7 @@ public final class RrceClient implements ClientModInitializer {
     public static PreviewSnapshot preview = PreviewSnapshot.empty();
     private static final List<BezierConnection> curvePreviews = new ArrayList<>();
     private static volatile Set<Long> hiddenExistingBlocks = Set.of();
+    private static boolean toolPressHeld;
 
     public record PreviewSnapshot(int revision, long[] clear, long[] blockPositions, int[] blockStates,
                                   int blocks, int curves, Component error) {
@@ -82,6 +84,13 @@ public final class RrceClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
         RrcePonder.register();
+        ClientTickEvents.END_CLIENT_TICK.register(client -> {
+            if (toolPressHeld && !client.options.keyUse.isDown()) {
+                toolPressHeld = false;
+                if (ClientPlayNetworking.canSend(RrceMod.TOOL_RELEASE_PACKET))
+                    ClientPlayNetworking.send(RrceMod.TOOL_RELEASE_PACKET, PacketByteBufs.create());
+            }
+        });
         ClientPlayNetworking.registerGlobalReceiver(RrceMod.CONFIG_SYNC, (client, handler, buf, sender) -> {
             CompoundTag state = buf.readNbt();
             client.execute(() -> {
@@ -113,6 +122,7 @@ public final class RrceClient implements ClientModInitializer {
             });
         });
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
+            toolPressHeld = false;
             points.clear(); selected = -1; preview = PreviewSnapshot.empty(); curvePreviews.clear();
             hiddenExistingBlocks = Set.of();
         });
@@ -159,13 +169,26 @@ public final class RrceClient implements ClientModInitializer {
         if (client.player != null && client.screen == null) client.setScreen(new ConstructionConfigScreen());
     }
 
+    public static boolean claimToolPress() {
+        if (toolPressHeld) return false;
+        toolPressHeld = true;
+        return true;
+    }
+
+    public static void openQuickScreen(dev.sjimo.rrce.QuickRouteGeometry.Kind kind) {
+        Minecraft client = Minecraft.getInstance();
+        if (client.player != null && client.screen == null)
+            client.setScreen(new QuickRouteScreen(kind));
+    }
+
     private static boolean holdingConstructionItem(Minecraft client) {
         return client.player != null && (client.player.getMainHandItem().is(RrceMod.TOOL)
             || client.player.getMainHandItem().is(RrceMod.PLAN)
             || client.player.getMainHandItem().is(RrceMod.DIRECTION)
             || client.player.getMainHandItem().is(RrceMod.SELECT)
             || client.player.getMainHandItem().is(RrceMod.MOVE)
-            || client.player.getMainHandItem().is(RrceMod.REMOVE));
+            || client.player.getMainHandItem().is(RrceMod.REMOVE)
+            || client.player.getMainHandItem().getItem() instanceof dev.sjimo.rrce.QuickRouteTool);
     }
 
     private static void drawDirection(PoseStack pose, VertexConsumer lines, SurveyPoint point,

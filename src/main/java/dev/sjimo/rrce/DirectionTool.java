@@ -26,8 +26,10 @@ public final class DirectionTool extends Item {
     }
 
     public InteractionResult rotate(Player player, Level level) {
+        if (player.isSpectator()) return InteractionResult.FAIL;
+        if (!ToolPress.claim(player, level)) return InteractionResult.CONSUME;
         if (level.isClientSide) return InteractionResult.SUCCESS;
-        if (!(player instanceof ServerPlayer serverPlayer) || player.isSpectator()) return InteractionResult.FAIL;
+        if (!(player instanceof ServerPlayer serverPlayer)) return InteractionResult.FAIL;
         PlayerSession session = SessionManager.get(player.getUUID());
         if (session.selectedPoint < 0 || session.selectedPoint >= session.points.size()) {
             RrceSounds.deny(serverPlayer);

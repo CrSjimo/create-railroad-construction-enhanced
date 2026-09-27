@@ -25,8 +25,17 @@ public final class PlayerSession {
     private List<SurveyPoint> pointsBeforeLatestBuild;
     private int selectedBeforeLatestBuild;
     private EditHistory latestBuildForPointRestore;
+    private boolean toolPressHeld;
 
     public record UndoResult(EditHistory edit, boolean pointsRestored) {}
+
+    boolean claimToolPress() {
+        if (toolPressHeld) return false;
+        toolPressHeld = true;
+        return true;
+    }
+
+    void releaseToolPress() { toolPressHeld = false; }
 
     public void addPoint(BlockPos point, TrackHeading heading) {
         if (points.size() >= 64) throw new UserFacingException("error.rrce.too_many_points");

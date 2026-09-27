@@ -16,6 +16,9 @@ public final class ConstructionPlanItem extends Item {
 
     @Override
     public InteractionResult useOn(UseOnContext context) {
+        if (context.getPlayer() == null || context.getHand() != InteractionHand.MAIN_HAND)
+            return InteractionResult.PASS;
+        if (!ToolPress.claim(context.getPlayer(), context.getLevel())) return InteractionResult.CONSUME;
         if (context.getLevel().isClientSide && context.getHand() == InteractionHand.MAIN_HAND)
             RrceClient.openScreen();
         return InteractionResult.sidedSuccess(context.getLevel().isClientSide);
@@ -23,6 +26,8 @@ public final class ConstructionPlanItem extends Item {
 
     @Override
     public InteractionResultHolder<ItemStack> use(Level level, Player player, InteractionHand hand) {
+        if (hand != InteractionHand.MAIN_HAND || !ToolPress.claim(player, level))
+            return InteractionResultHolder.consume(player.getItemInHand(hand));
         if (level.isClientSide && hand == InteractionHand.MAIN_HAND) RrceClient.openScreen();
         return InteractionResultHolder.sidedSuccess(player.getItemInHand(hand), level.isClientSide);
     }

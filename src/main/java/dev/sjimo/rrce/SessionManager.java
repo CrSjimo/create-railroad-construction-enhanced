@@ -17,12 +17,18 @@ public final class SessionManager {
 
     public static void disconnected(UUID id) {
         PlayerSession session = SESSIONS.get(id);
-        if (session != null) session.disconnectedAt = Instant.now();
+        if (session != null) {
+            session.disconnectedAt = Instant.now();
+            session.releaseToolPress();
+        }
     }
 
     public static void connected(UUID id) {
         PlayerSession session = SESSIONS.get(id);
-        if (session != null) session.disconnectedAt = null;
+        if (session != null) {
+            session.disconnectedAt = null;
+            session.releaseToolPress();
+        }
     }
 
     public static void expire() {
