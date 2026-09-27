@@ -1,0 +1,14 @@
+{
+  "required": true,
+  "package": "dev.sjimo.rrce.mixin.client",
+  "plugin": "dev.sjimo.rrce.mixin.client.PreviewMixinPlugin",
+  "compatibilityLevel": "JAVA_17",
+  "client": [
+    "RenderChunkRegionMixin",
+    "BlockEntityRenderDispatcherMixin",
+    "SodiumWorldSliceMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
