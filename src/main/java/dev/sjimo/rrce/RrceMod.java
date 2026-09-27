@@ -10,6 +10,7 @@ import dev.sjimo.rrce.world.ConstructionPlan;
 import dev.sjimo.rrce.world.ConstructionPlanner;
 import dev.sjimo.rrce.world.CreateUnlimitedCompat;
 import dev.sjimo.rrce.world.EditHistory;
+import dev.sjimo.rrce.world.PlayerConstructionSettings;
 import dev.sjimo.rrce.world.TrackHeading;
 import dev.sjimo.rrce.world.TerrainRules;
 import net.fabricmc.api.ModInitializer;
@@ -104,7 +105,8 @@ public final class RrceMod implements ModInitializer {
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
             ServerPlayer player = handler.player;
             SessionManager.connected(player.getUUID());
-            loadItemConfig(player);
+            SessionManager.get(player.getUUID()).config =
+                PlayerConstructionSettings.forServer(server).get(player.getUUID());
             sync(player);
         });
         ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> SessionManager.disconnected(handler.player.getUUID()));
@@ -458,11 +460,7 @@ public final class RrceMod implements ModInitializer {
 
     private static void syncState(ServerPlayer player) {
         PlayerSession session = SessionManager.get(player.getUUID());
-        for (int i = 0; i < player.getInventory().getContainerSize(); i++) {
-            var stack = player.getInventory().getItem(i);
-            if (isConstructionItem(stack))
-                stack.getOrCreateTag().put("RRCEConfig", session.config.save());
-        }
+        PlayerConstructionSettings.forServer(player.getServer()).put(player.getUUID(), session.config);
         CompoundTag state = new CompoundTag();
         state.put("config", session.config.save());
         state.putLongArray("points", session.points.stream().mapToLong(p -> p.pos().asLong()).toArray());
@@ -554,21 +552,4 @@ public final class RrceMod implements ModInitializer {
         ServerPlayNetworking.send(player, PREVIEW_SYNC, buf);
     }
 
-    private static void loadItemConfig(ServerPlayer player) {
-        for (int i = 0; i < player.getInventory().getContainerSize(); i++) {
-            var stack = player.getInventory().getItem(i);
-            if (isConstructionItem(stack) && stack.hasTag()
-                && stack.getTag().contains("RRCEConfig")) {
-                try { SessionManager.get(player.getUUID()).config = ConstructionConfig.load(stack.getTag().getCompound("RRCEConfig")); }
-                catch (RuntimeException ignored) { /* Invalid old settings fall back to defaults. */ }
-                return;
-            }
-        }
-    }
-
-    private static boolean isConstructionItem(net.minecraft.world.item.ItemStack stack) {
-        return stack.is(TOOL) || stack.is(PLAN) || stack.is(DIRECTION)
-            || stack.is(SELECT) || stack.is(MOVE) || stack.is(REMOVE)
-            || stack.getItem() instanceof QuickRouteTool;
-    }
 }
