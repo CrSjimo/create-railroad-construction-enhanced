@@ -29,7 +29,7 @@
 
 ## 构建
 
-项目使用 Gradle Wrapper，从源码构建需要 JDK 17 或更高：
+项目使用 Gradle Wrapper，从源码构建需要 JDK 25：
 
 ```powershell
 .\gradlew.bat build
