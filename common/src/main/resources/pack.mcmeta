@@ -1,0 +1,7 @@
+{
+  "pack": {
+    "description": "Create Railroad Construction Enhanced resources",
+    "pack_format": 15,
+    "supported_formats": [15, 48]
+  }
+}

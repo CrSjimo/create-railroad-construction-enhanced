@@ -16,8 +16,17 @@ concurrency:
 
 jobs:
   build:
-    name: Build (Java 25)
+    name: ${{ matrix.target }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - mc1201-fabric-create05
+          - mc1201-fabric-create6
+          - mc1201-forge-create05
+          - mc1201-forge-create6
+          - mc1211-neoforge-create6
 
     steps:
       - name: Checkout repository
@@ -26,11 +35,14 @@ jobs:
       - name: Validate Gradle wrapper
         uses: gradle/actions/wrapper-validation@v4
 
-      - name: Set up JDK 25
+      - name: Set up build and game JDKs
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '25'
+          java-version: |
+            17
+            21
+            25
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -38,12 +50,12 @@ jobs:
           cache-read-only: ${{ github.event_name == 'pull_request' }}
 
       - name: Build and test
-        run: ./gradlew build --no-daemon --stacktrace
+        run: ./gradlew -Ptarget=${{ matrix.target }} build --no-daemon --stacktrace
 
       - name: Upload mod jar
         uses: actions/upload-artifact@v4
         with:
-          name: create-railroad-construction-enhanced
+          name: create-railroad-construction-enhanced-${{ matrix.target }}
           path: |
             build/libs/*.jar
             !build/libs/*-sources.jar

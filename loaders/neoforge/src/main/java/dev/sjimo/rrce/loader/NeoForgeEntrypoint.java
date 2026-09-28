@@ -1,0 +1,119 @@
+package dev.sjimo.rrce.loader;
+
+import java.nio.file.Path;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.function.BiConsumer;
+import dev.sjimo.rrce.RrceMod;
+import dev.sjimo.rrce.platform.Events;
+import dev.sjimo.rrce.platform.GameApi;
+import dev.sjimo.rrce.platform.Network;
+import dev.sjimo.rrce.platform.Platform;
+import io.netty.buffer.Unpooled;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.network.codec.StreamCodec;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.item.CreativeModeTab;
+import net.minecraft.world.item.Item;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.bus.api.IEventBus;
+import net.neoforged.fml.common.Mod;
+import net.neoforged.fml.loading.FMLEnvironment;
+import net.neoforged.fml.loading.FMLPaths;
+import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.event.RegisterCommandsEvent;
+import net.neoforged.neoforge.event.entity.player.PlayerEvent;
+import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
+import net.neoforged.neoforge.event.server.ServerStartingEvent;
+import net.neoforged.neoforge.event.tick.ServerTickEvent;
+import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
+import net.neoforged.neoforge.network.PacketDistributor;
+import net.neoforged.neoforge.registries.RegisterEvent;
+
+@Mod(RrceMod.ID)
+public final class NeoForgeEntrypoint implements Platform.Backend {
+    private final Map<ResourceLocation, Item> items = new LinkedHashMap<>();
+    private final Map<ResourceLocation, CreativeModeTab> tabs = new LinkedHashMap<>();
+    private static final Map<ResourceLocation, Network.ServerReceiver> receivers = new HashMap<>();
+    public static BiConsumer<ResourceLocation, byte[]> clientReceiver;
+    public record Message(ResourceLocation id, byte[] bytes) implements CustomPacketPayload {
+        public static final Type<Message> TYPE = new Type<>(GameApi.id(RrceMod.ID, "main"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, Message> CODEC = new StreamCodec<>() {
+            @Override public Message decode(RegistryFriendlyByteBuf buffer) { return new Message(buffer.readResourceLocation(), buffer.readByteArray(1_048_576)); }
+            @Override public void encode(RegistryFriendlyByteBuf buffer, Message message) { buffer.writeResourceLocation(message.id); buffer.writeByteArray(message.bytes); }
+        };
+        @Override public Type<Message> type() { return TYPE; }
+    }
+    public NeoForgeEntrypoint(IEventBus bus) {
+        Platform.install(this);
+        bus.addListener(this::register);
+        bus.addListener(this::network);
+        NeoForge.EVENT_BUS.addListener(this::useBlock);
+        NeoForge.EVENT_BUS.addListener(this::join);
+        NeoForge.EVENT_BUS.addListener(this::disconnect);
+        NeoForge.EVENT_BUS.addListener(this::changeWorld);
+        NeoForge.EVENT_BUS.addListener(this::tick);
+        NeoForge.EVENT_BUS.addListener(this::starting);
+        NeoForge.EVENT_BUS.addListener(this::commands);
+        if (FMLEnvironment.dist == Dist.CLIENT) NeoForgeClient.initialize(bus);
+    }
+    private void register(RegisterEvent event) {
+        // Intrusive item holders may only be created while the item registry is open.
+        if (event.getRegistryKey().equals(Registries.ITEM)) {
+            new RrceMod().onInitialize();
+            items.forEach((id, item) -> event.register(Registries.ITEM, id, () -> item));
+        } else if (event.getRegistryKey().equals(Registries.CREATIVE_MODE_TAB)) {
+            tabs.forEach((id, tab) -> event.register(Registries.CREATIVE_MODE_TAB, id, () -> tab));
+        }
+    }
+    private void network(RegisterPayloadHandlersEvent event) {
+        event.registrar("1").playBidirectional(Message.TYPE, Message.CODEC, (message, context) -> {
+            if (context.player() instanceof ServerPlayer player) {
+                Network.ServerReceiver receiver = receivers.get(message.id);
+                if (receiver != null) {
+                    FriendlyByteBuf data = new FriendlyByteBuf(Unpooled.wrappedBuffer(message.bytes));
+                    try { receiver.receive(player.server, player, player.connection, data, null); }
+                    finally { data.release(); }
+                }
+            } else if (clientReceiver != null) clientReceiver.accept(message.id, message.bytes);
+        });
+    }
+    private void useBlock(PlayerInteractEvent.RightClickBlock event) {
+        InteractionResult result = Events.useBlock(event.getEntity(), event.getLevel(), event.getHand(), event.getHitVec());
+        if (result != InteractionResult.PASS) { event.setCanceled(true); event.setCancellationResult(result); }
+    }
+    private void join(PlayerEvent.PlayerLoggedInEvent event) {
+        if (event.getEntity() instanceof ServerPlayer player)
+            Events.ServerPlayConnectionEvents.JOIN.listeners.forEach(callback -> callback.join(player.connection, null, player.server));
+    }
+    private void disconnect(PlayerEvent.PlayerLoggedOutEvent event) {
+        if (event.getEntity() instanceof ServerPlayer player)
+            Events.ServerPlayConnectionEvents.DISCONNECT.listeners.forEach(callback -> callback.disconnect(player.connection, player.server));
+    }
+    private void changeWorld(PlayerEvent.PlayerChangedDimensionEvent event) {
+        if (event.getEntity() instanceof ServerPlayer player)
+            Events.ServerEntityWorldChangeEvents.AFTER_PLAYER_CHANGE_WORLD.listeners.forEach(callback -> callback.change(player, player.server.getLevel(event.getFrom()), player.server.getLevel(event.getTo())));
+    }
+    private void tick(ServerTickEvent.Post event) { Events.ServerTickEvents.END_SERVER_TICK.listeners.forEach(callback -> callback.accept(event.getServer())); }
+    private void starting(ServerStartingEvent event) { Events.ServerLifecycleEvents.SERVER_STARTING.listeners.forEach(callback -> callback.accept(event.getServer())); }
+    private void commands(RegisterCommandsEvent event) { Events.CommandRegistrationCallback.EVENT.listeners.forEach(callback -> callback.register(event.getDispatcher(), event.getBuildContext(), event.getCommandSelection())); }
+    @Override public void registerItem(ResourceLocation id, Item item) { items.put(id, item); }
+    @Override public void registerTab(ResourceLocation id, CreativeModeTab tab) { tabs.put(id, tab); }
+    @Override public CreativeModeTab.Builder creativeTabBuilder() { return CreativeModeTab.builder(); }
+    @Override public boolean isModLoaded(String id) { return dev.sjimo.rrce.platform.PlatformLoader.getInstance().isModLoaded(id); }
+    @Override public Path configDir() { return FMLPaths.CONFIGDIR.get(); }
+    @Override public void registerReceiver(ResourceLocation id, Network.ServerReceiver receiver) { receivers.put(id, receiver); }
+    @Override public void send(ServerPlayer player, ResourceLocation id, FriendlyByteBuf data) { PacketDistributor.sendToPlayer(player, message(id, data)); }
+    public static Message message(ResourceLocation id, FriendlyByteBuf data) {
+        byte[] bytes = new byte[data.readableBytes()];
+        data.getBytes(data.readerIndex(), bytes);
+        data.release();
+        return new Message(id, bytes);
+    }
+}

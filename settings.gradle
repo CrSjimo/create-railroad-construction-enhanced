@@ -1,8 +1,23 @@
 pluginManagement {
     repositories {
-        maven { url = 'https://maven.fabricmc.net/' }
+        maven { url = 'https://maven.fabricmc.net/'; content { includeGroup 'fabric-loom'; includeGroupByRegex 'net\\.fabricmc.*' } }
+        maven { url = 'https://maven.neoforged.net/releases/'; content { includeGroupByRegex 'net\\.neoforged.*' } }
         gradlePluginPortal()
     }
 }
 
+plugins {
+    id 'org.gradle.toolchains.foojay-resolver-convention' version '1.0.0'
+}
+
 rootProject.name = 'create-railroad-construction-enhanced'
+
+def targets = new groovy.json.JsonSlurper().parse(file('targets/matrix.json'))
+def selected = providers.gradleProperty('target').orNull
+if (selected != null && !targets.containsKey(selected)) throw new GradleException("Unknown target: ${selected}")
+targets.each { name, configuration ->
+    if (selected == null || selected == name) {
+        include(name)
+        project(":${name}").projectDir = file("targets/${name}")
+    }
+}

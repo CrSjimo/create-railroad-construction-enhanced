@@ -44,6 +44,7 @@ replay_pid*
 # Minecraft development runtime
 run/
 runs/
+logs/
 
 # Loom generated/remapped sources
 remappedSrc/

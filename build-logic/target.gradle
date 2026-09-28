@@ -1,0 +1,158 @@
+apply plugin: 'java'
+apply plugin: target.loader == 'fabric' ? 'fabric-loom' :
+    target.loader == 'forge' ? 'net.neoforged.moddev.legacyforge' : 'net.neoforged.moddev'
+
+version = rootProject.mod_version
+group = rootProject.maven_group
+base.archivesName = "${rootProject.archives_base_name}-${target.loader}-${target.minecraft}-create${target.createGeneration}"
+
+repositories {
+    maven { url = 'https://maven.fabricmc.net/'; content { includeGroupByRegex 'net\\.fabricmc.*' } }
+    maven { url = 'https://mvn.devos.one/snapshots/'; content { includeGroupByRegex 'com\\.simibubi.*'; includeGroupByRegex 'io\\.github\\.fabricators_of_create.*'; includeGroupByRegex 'com\\.tterrag.*'; includeGroupByRegex 'io\\.github\\.draylar.*'; includeGroupByRegex 'io\\.github\\.tropheusj.*'; includeGroupByRegex 'dev\\.engine-room.*' } }
+    maven { url = 'https://mvn.devos.one/releases/'; content { includeGroupByRegex 'io\\.github\\.fabricators_of_create.*'; includeGroupByRegex 'io\\.github\\.tropheusj.*' } }
+    maven { url = 'https://maven.createmod.net/'; content { includeGroupByRegex 'com\\.simibubi.*'; includeGroupByRegex 'com\\.tterrag.*'; includeGroupByRegex 'net\\.createmod.*'; includeGroupByRegex 'dev\\.engine-room.*' } }
+    maven { url = 'https://maven.ithundxr.dev/mirror/'; content { includeGroupByRegex 'com\\.tterrag.*' } }
+    maven { url = 'https://maven.ithundxr.dev/snapshots/'; content { includeGroupByRegex 'io\\.github\\.fabricators_of_create.*' } }
+    maven { url = 'https://raw.githubusercontent.com/Fuzss/modresources/main/maven'; content { includeGroupByRegex 'fuzs.*' } }
+    maven { url = 'https://maven.jamieswhiteshirt.com/libs-release'; content { includeGroupByRegex 'com\\.jamieswhiteshirt.*' } }
+    maven { url = 'https://modmaven.dev/'; content { includeGroup 'com.jozufozu.flywheel'; includeModule 'com.simibubi.create', 'create-1.20.1'; includeGroup 'com.tterrag.registrate' } }
+    mavenCentral()
+}
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(target.java)
+    withSourcesJar()
+}
+tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8' }
+
+// Ponder extracted its API in Create 6. Only upstream names/accessors are translated;
+// lesson bodies, text, timing and geometry still have a single authoritative source.
+def ponderSource = 'dev/sjimo/rrce/client/RrcePonder.java'
+def generatedCommon = layout.buildDirectory.dir('generated/sources/common')
+def prepareCommon = tasks.register('prepareCommon', Sync) {
+    from(rootProject.file('common/src/main/java'))
+    into(generatedCommon)
+    if (target.createGeneration == '6') {
+        filesMatching(ponderSource) {
+            filter { line ->
+                line.replace('com.simibubi.create.foundation.ponder.PonderPalette', 'net.createmod.ponder.api.PonderPalette')
+                    .replace('com.simibubi.create.foundation.ponder.SceneBuilder', 'net.createmod.ponder.api.scene.SceneBuilder')
+                    .replace('com.simibubi.create.foundation.ponder.SceneBuildingUtil', 'net.createmod.ponder.api.scene.SceneBuildingUtil')
+                    .replace('com.simibubi.create.foundation.utility.Pointing', 'net.createmod.catnip.math.Pointing')
+                    .replace('scene.world.', 'scene.world().').replace('scene.overlay.', 'scene.overlay().')
+                    .replace('util.select.', 'util.select().').replace('util.vector.', 'util.vector().')
+            }
+        }
+    }
+}
+tasks.named('compileJava') { dependsOn prepareCommon }
+tasks.named('sourcesJar') { dependsOn prepareCommon }
+sourceSets {
+    main {
+        java.srcDirs = [generatedCommon,
+            rootProject.file("loaders/${target.loader}/src/main/java"),
+            rootProject.file("minecraft/mc${target.minecraft.replace('.', '')}/src/main/java"),
+            rootProject.file("create/create${target.createGeneration == '0.5' ? '05' : '6'}/src/main/java")]
+        resources.srcDirs = [rootProject.file('common/src/main/resources'),
+            rootProject.file("loaders/${target.loader}/src/main/resources")]
+    }
+    test {
+        java.srcDirs = [rootProject.file('common/src/test/java'),
+            rootProject.file("minecraft/mc${target.minecraft.replace('.', '')}/src/test/java")]
+        compileClasspath += sourceSets.main.compileClasspath
+        runtimeClasspath += sourceSets.main.runtimeClasspath
+    }
+}
+dependencies {
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.11.4'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+test { useJUnitPlatform(); systemProperty 'rrce.test.loader', target.loader }
+
+if (target.loader == 'fabric') {
+    dependencies {
+        minecraft "com.mojang:minecraft:${target.minecraft}"
+        mappings loom.officialMojangMappings()
+        modImplementation "net.fabricmc:fabric-loader:${target.fabricLoader}"
+        modImplementation "net.fabricmc.fabric-api:fabric-api:${target.fabricApi}"
+        modImplementation("com.simibubi.create:${target.createArtifact}:${target.create}") {
+            if (target.createGeneration == '6') exclude group: 'dev.engine-room.flywheel', module: 'flywheel-fabric-api-1.20.1'
+        }
+    }
+} else if (target.loader == 'forge') {
+    legacyForge {
+        enable { forgeVersion = "${target.minecraft}-${target.forge}"; disableRecompilation = true }
+        runs {
+            client { client() }
+            server { server(); programArguments.add('nogui') }
+        }
+        mods { rrce { sourceSet sourceSets.main } }
+    }
+    dependencies {
+        modImplementation "com.simibubi.create:create-${target.minecraft}:${target.create}:slim"
+        modImplementation "com.tterrag.registrate:Registrate:${target.registrate}"
+        if (target.createGeneration == '0.5') {
+            modImplementation "com.jozufozu.flywheel:flywheel-forge-${target.minecraft}:${target.flywheel}"
+        } else {
+            modImplementation 'io.github.llamalad7:mixinextras-forge:0.4.1'
+            modImplementation "net.createmod.ponder:Ponder-Forge-${target.minecraft}:${target.ponder}"
+            modImplementation "dev.engine-room.flywheel:flywheel-forge-${target.minecraft}:${target.flywheel}"
+            modCompileOnly "dev.engine-room.flywheel:flywheel-forge-api-${target.minecraft}:${target.flywheel}"
+        }
+        annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
+    }
+    mixin { add sourceSets.main, 'rrce.refmap.json'; config 'rrce.client.mixins.json' }
+    jar { manifest.attributes('MixinConfigs': 'rrce.client.mixins.json') }
+    // NFRT's remapped Forge jar retains upstream signatures; plain JUnit must not
+    // verify those signatures against transformed bytecode. Do not alter run jars.
+    def gameJar = layout.buildDirectory.file("moddev/artifacts/forge-${target.minecraft}-${target.forge}.jar")
+    def testGameJar = tasks.register('testGameJar', Jar) {
+        dependsOn 'createMinecraftArtifacts'
+        from { zipTree(gameJar) }
+        exclude 'META-INF/*.SF', 'META-INF/*.RSA', 'META-INF/*.DSA', 'META-INF/MANIFEST.MF'
+        archiveFileName = 'unsigned-game.jar'
+        destinationDirectory = layout.buildDirectory.dir('test-runtime')
+    }
+    test {
+        dependsOn testGameJar
+        classpath = files(testGameJar.flatMap { it.archiveFile }) + sourceSets.test.runtimeClasspath.filter { it != gameJar.get().asFile }
+    }
+} else {
+    neoForge {
+        enable { version = target.neoforge; disableRecompilation = true }
+        runs {
+            client { client() }
+            server { server(); programArguments.add('nogui') }
+        }
+        mods { rrce { sourceSet sourceSets.main } }
+        unitTest { enable(); testedMod = mods.rrce }
+    }
+    dependencies {
+        implementation("com.simibubi.create:create-${target.minecraft}:${target.create}:slim") { transitive = false }
+        implementation "net.createmod.ponder:ponder-neoforge:${target.ponder}+mc${target.minecraft}"
+        implementation "com.tterrag.registrate:Registrate:${target.registrate}"
+        runtimeOnly "dev.engine-room.flywheel:flywheel-neoforge-${target.minecraft}:${target.flywheel}"
+        compileOnly "dev.engine-room.flywheel:flywheel-neoforge-api-${target.minecraft}:${target.flywheel}"
+    }
+}
+
+def metadata = [version: project.version, minecraft: target.minecraft,
+    java: target.java, create: target.create, create_range: target.createGeneration == '0.5' ? '[0.5.1.j,0.6)' :
+        target.loader == 'neoforge' ? '[6.0.10,6.1)' : '[6.0.8,6.1)',
+    mixin_java: "JAVA_${target.java}"]
+processResources {
+    inputs.properties(metadata)
+    filesMatching(['fabric.mod.json', 'META-INF/*mods.toml', 'rrce.client.mixins.json']) { expand(metadata) }
+    doLast {
+        def config = file("${destinationDir}/rrce.client.mixins.json")
+        def json = new groovy.json.JsonSlurper().parse(config)
+        if (target.loader != 'forge') json.remove('refmap')
+        config.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(json))
+    }
+}
+tasks.register('collectArtifact', Copy) {
+    dependsOn target.loader == 'fabric' ? tasks.named('remapJar') : target.loader == 'forge' ? tasks.named('reobfJar') : tasks.named('jar')
+    from(layout.buildDirectory.dir('libs')) { include '*.jar'; exclude '*-sources.jar', '*-dev.jar' }
+    into(rootProject.layout.buildDirectory.dir('libs'))
+}
+tasks.named('build') { dependsOn 'collectArtifact' }

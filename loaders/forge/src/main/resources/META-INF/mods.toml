@@ -1,0 +1,36 @@
+modLoader="javafml"
+loaderVersion="[47,)"
+license="GPL-3.0-or-later"
+issueTrackerURL="https://github.com/CrSjimo/create-railroad-construction-enhanced/issues"
+[[mods]]
+modId="rrce"
+version="${version}"
+displayName="Create: Railroad Construction Enhanced"
+displayURL="https://github.com/CrSjimo/create-railroad-construction-enhanced"
+logoFile="icon.png"
+logoBlur=false
+authors="CrSjimo"
+credits="Create by the Creators of Create; logo background from the Create Wiki."
+description='''
+Survey railway routes with control points, then use a Construction Plan to build
+straight tracks, curves, slopes and parallel lines for Create. Includes terrain
+excavation, tunnels, construction previews, undo and redo.
+'''
+[[dependencies.rrce]]
+modId="forge"
+mandatory=true
+versionRange="[47.4,)"
+ordering="NONE"
+side="BOTH"
+[[dependencies.rrce]]
+modId="minecraft"
+mandatory=true
+versionRange="[${minecraft}]"
+ordering="NONE"
+side="BOTH"
+[[dependencies.rrce]]
+modId="create"
+mandatory=true
+versionRange="${create_range}"
+ordering="AFTER"
+side="BOTH"

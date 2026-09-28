@@ -1,6 +1,8 @@
 # 机械动力铁路施工增强（RRCE）
 
-机械动力铁路施工增强（Create: Railroad Construction Enhanced，RRCE）是一个面向 Minecraft 1.20.1 / Fabric 的 Create 附属模组，提供以控制点勘测为基础的铁路批量施工能力：先用手持工具标定带有方向的轨道端点，再由铁路施工图按参数一次性修建直线、弯道、坡道、多条平行复线、路堑与隧道。
+![RRCE Icon](common\src\main\resources\icon.png)
+
+机械动力铁路施工增强（Create: Railroad Construction Enhanced，RRCE）是一个面向 Minecraft 1.20.1 / Fabric、Forge 和 Minecraft 1.21.1 / NeoForge 的 Create 附属模组，提供以控制点勘测为基础的铁路批量施工能力：先用手持工具标定带有方向的轨道端点，再由铁路施工图按参数一次性修建直线、弯道、坡道、多条平行复线、路堑与隧道。
 
 ## 功能概览
 
@@ -12,13 +14,15 @@
 
 ## 运行环境
 
-| 项目 | 要求 |
-|---|---|
-| Minecraft | 1.20.1 |
-| Fabric Loader | 0.16.9 或更高 |
-| Fabric API | 必需 |
-| Create Fabric | 0.5.1-j-build.1631 |
-| Java | 17 或更高 |
+| Minecraft | 加载器 | Create 构建基准 | 游戏 Java |
+|---|---|---|---|
+| 1.20.1 | Fabric Loader 0.19.5、Fabric API | 0.5.1-j-build.1631 | 17 |
+| 1.20.1 | Fabric Loader 0.19.5、Fabric API | 6.0.8.1+build.1744 | 17 |
+| 1.20.1 | Forge 47.4.0 | 0.5.1.j | 17 |
+| 1.20.1 | Forge 47.4.0 | 6.0.8 | 17 |
+| 1.21.1 | NeoForge 21.1.219 | 6.0.10 | 21 |
+
+每一行使用独立产物，不能混用加载器、Minecraft 版本或 Create 代际。Create 新代际的正式版本号为 6.0，而不是 0.6；1.21.1 没有 Create 0.5 目标，也不提供 Fabric 1.21.1 产物。
 
 可选兼容模组：
 
@@ -29,7 +33,7 @@
 
 ## 构建
 
-项目使用 Gradle Wrapper，从源码构建需要 JDK 25：
+项目使用 Gradle Wrapper，从源码构建使用 JDK 25；Gradle 自动获取各目标所需的 Java 17 / 21 工具链。下述命令构建全部五个版本目标，可使用 `-Ptarget=mc1201-forge-create6` 等目标名称单独构建。产物文件名包含模组版本、加载器、Minecraft 版本与 Create 代际：
 
 ```powershell
 .\gradlew.bat build

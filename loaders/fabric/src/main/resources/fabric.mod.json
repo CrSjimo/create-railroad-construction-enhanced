@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "id": "rrce",
+  "version": "${version}",
+  "name": "Create Railroad Construction Enhanced",
+  "description": "Manual multi-track railway construction for Create.",
+  "authors": ["RRCE"],
+  "environment": "*",
+  "entrypoints": {
+    "main": ["dev.sjimo.rrce.loader.FabricEntrypoint"],
+    "client": ["dev.sjimo.rrce.loader.FabricClientEntrypoint"]
+  },
+  "mixins": ["rrce.client.mixins.json"],
+  "depends": {
+    "fabricloader": ">=0.16.9",
+    "minecraft": "${minecraft}",
+    "java": ">=${java}",
+    "fabric-api": "*",
+    "create": "${create}"
+  }
+}

@@ -4,7 +4,7 @@
 
 ## 一、准备
 
-- **游戏环境**：Minecraft 1.20.1、Fabric Loader 0.16.9 或更高、Fabric API，以及 Create Fabric 0.5.1-j-build.1631。
+- **游戏环境**：Minecraft 1.20.1 使用 Fabric Loader 0.19.5（另需 Fabric API）或 Forge 47.4.0，分别提供 Create 0.5.1-j / 0.5.1.j 与 Create 6.0 的独立产物；Minecraft 1.21.1 使用 NeoForge 21.1.219 与 Create 6.0.10。1.20.1 使用 Java 17，1.21.1 使用 Java 21。安装时必须匹配加载器、游戏版本和 Create 代际；不支持 Fabric 1.21.1 或 1.21.1 / Create 0.5。
 - **可选模组**：安装 Create: Steam ’n’ Rails（气鸣铁道）可获得更多轨道材质；安装 Create Unlimited 后，在关闭放置检查时可同步放宽坡道与弯道限制。二者都不是必需依赖。
 - **获取物品**：在创造模式物品栏的独立分组「铁路施工」中取出铁路施工图、五件控制点工具与四件快速规划工具。它们没有合成配方，取得后可在生存与冒险模式使用。
 - **使用权限**：服务端只允许手持施工物品或拥有 OP 2 权限的玩家执行施工、命令与界面操作；旁观模式无法使用。
