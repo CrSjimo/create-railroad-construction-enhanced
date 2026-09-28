@@ -5,6 +5,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import com.mojang.blaze3d.platform.Lighting;
+import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.math.Axis;
 import com.simibubi.create.content.trains.track.TrackMaterial;
 import dev.sjimo.rrce.ConstructionConfig;
 import dev.sjimo.rrce.RrceMod;
@@ -14,11 +17,14 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.Tooltip;
-import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.renderer.LightTexture;
+import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.block.Block;
 
 public final class ConstructionConfigScreen extends dev.sjimo.rrce.client.platform.CompatScreen {
     private final ConstructionConfig config = ConstructionConfig.load(RrceClient.config.save());
@@ -111,8 +117,8 @@ public final class ConstructionConfigScreen extends dev.sjimo.rrce.client.platfo
         addRenderableWidget(Button.builder(t("screen.rrce.next_line"), b -> {
             if (savePage()) { selectedLine = (selectedLine + 1) % config.lineCount; rebuildWidgets(); }
         }).bounds(right, top + 68, columnWidth, 20).build());
-        addFieldAt("foundation", config.foundation, left, top + 111, columnWidth);
-        addFieldAt("wall", config.wall, right, top + 111, columnWidth);
+        addBlockField("foundation", config.foundation, left, top + 111);
+        addBlockField("wall", config.wall, right, top + 111);
         int materialY = top + 150;
         addFieldAt("material", config.materials.get(selectedLine), left + 22, materialY,
             columnWidth - 44);
@@ -204,6 +210,11 @@ public final class ConstructionConfigScreen extends dev.sjimo.rrce.client.platfo
         }
     }
 
+    private void addBlockField(String name, String value, int x, int y) {
+        addFieldAt(name, value, x + 22, y, columnWidth - 22);
+        fields.get(name).setHint(t("screen.rrce.no_" + name));
+    }
+
     private int number(String key, int min, int max) {
         try {
             int parsed = Integer.parseInt(value(key));
@@ -252,9 +263,7 @@ public final class ConstructionConfigScreen extends dev.sjimo.rrce.client.platfo
     private boolean apply() {
         if (!savePage()) return false;
         for (String id : new String[] {config.foundation, config.wall}) {
-            ResourceLocation key = ResourceLocation.tryParse(id);
-            if (key == null || !BuiltInRegistries.BLOCK.containsKey(key)
-                || !BuiltInRegistries.BLOCK.get(key).defaultBlockState().blocksMotion()) {
+            if (!ConstructionConfig.isValidBlockMaterial(id)) {
                 message = t("screen.rrce.invalid_block", id).getString();
                 return false;
             }
@@ -290,8 +299,10 @@ public final class ConstructionConfigScreen extends dev.sjimo.rrce.client.platfo
         graphics.drawString(font, title, left, top + 7, 0xFFE9D8AE);
         for (Map.Entry<String, EditBox> entry : fields.entrySet()) {
             if (page == 3 && entry.getKey().equals("material")) continue;
+            int labelX = entry.getValue().getX();
+            if (page == 3) labelX -= 22;
             graphics.drawString(font, t("screen.rrce.field." + entry.getKey()),
-                entry.getValue().getX(), entry.getValue().getY() - 12, 0xFFD8D6C8);
+                labelX, entry.getValue().getY() - 12, 0xFFD8D6C8);
         }
         if (page == 3) {
             graphics.drawString(font, t("screen.rrce.line_number", selectedLine + 1, config.lineCount),
@@ -324,6 +335,47 @@ public final class ConstructionConfigScreen extends dev.sjimo.rrce.client.platfo
         }
         if (!message.isEmpty()) graphics.drawString(font, font.plainSubstrByWidth(message, panelWidth),
             left, top + 210, 0xFFFFB28B);
+        if (page == 3) {
+            renderBlockPreview(graphics, "foundation");
+            renderBlockPreview(graphics, "wall");
+        }
+    }
+
+    private void renderBlockPreview(GuiGraphics graphics, String name) {
+        EditBox field = fields.get(name);
+        int x = field.getX() - 22, y = field.getY();
+        graphics.fill(x, y, x + 20, y + 20, 0xFF343D3D);
+        String id = value(name);
+        ResourceLocation key = ResourceLocation.tryParse(id);
+        if (key == null || !BuiltInRegistries.BLOCK.containsKey(key)) return;
+        Block block = BuiltInRegistries.BLOCK.get(key);
+        if (!block.defaultBlockState().isAir()) renderBlockIcon(graphics, block, x, y);
+    }
+
+    private void renderBlockIcon(GuiGraphics graphics, Block block, int x, int y) {
+        ItemStack stack = new ItemStack(block.asItem());
+        if (!stack.isEmpty()) {
+            graphics.renderItem(stack, x + 2, y + 2);
+            return;
+        }
+        // Blocks such as farmland have no item, but still need a block preview.
+        graphics.flush();
+        PoseStack pose = graphics.pose();
+        pose.pushPose();
+        try {
+            pose.translate(x + 10, y + 10, 150);
+            pose.scale(10, -10, 10);
+            pose.mulPose(Axis.XP.rotationDegrees(30));
+            pose.mulPose(Axis.YP.rotationDegrees(225));
+            pose.translate(-.5, -.5, -.5);
+            Lighting.setupFor3DItems();
+            minecraft.getBlockRenderer().renderSingleBlock(block.defaultBlockState(), pose,
+                graphics.bufferSource(), LightTexture.FULL_BRIGHT, OverlayTexture.NO_OVERLAY);
+            graphics.flush();
+        } finally {
+            pose.popPose();
+            Lighting.setupFor3DItems();
+        }
     }
 
     private static void drawTriangle(GuiGraphics graphics, Button button, boolean up) {

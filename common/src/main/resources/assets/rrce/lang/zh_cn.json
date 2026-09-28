@@ -143,6 +143,8 @@
   "screen.rrce.field.wall": "隧道墙壁方块",
   "screen.rrce.field.material": "本线路轨道材质",
   "screen.rrce.no_track": "不铺设轨道",
+  "screen.rrce.no_foundation": "不铺设路基",
+  "screen.rrce.no_wall": "不修建隧道墙壁",
   "screen.rrce.preview": "预览：%s",
   "screen.rrce.preview_mode": "显示：%s",
   "screen.rrce.full": "施工全貌",

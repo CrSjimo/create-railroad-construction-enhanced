@@ -143,6 +143,8 @@
   "screen.rrce.field.wall": "Tunnel wall block",
   "screen.rrce.field.material": "Track material for this line",
   "screen.rrce.no_track": "No track",
+  "screen.rrce.no_foundation": "No foundation",
+  "screen.rrce.no_wall": "No tunnel walls",
   "screen.rrce.preview": "Preview: %s",
   "screen.rrce.preview_mode": "Show: %s",
   "screen.rrce.full": "Full works",

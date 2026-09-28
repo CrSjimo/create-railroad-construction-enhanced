@@ -45,6 +45,20 @@ final class ConstructionConfigTest {
         assertEquals("create:andesite", ConstructionConfig.load(old).materials.get(0));
     }
 
+    @Test void unsetAndAirBlockMaterialsRemainDistinctAfterSaving() {
+        ConstructionConfig config = new ConstructionConfig();
+        for (String id : new String[] {"", "minecraft:air"}) {
+            config.foundation = id;
+            config.wall = id;
+            ConstructionConfig loaded = ConstructionConfig.load(config.save());
+            assertEquals(id, loaded.foundation);
+            assertEquals(id, loaded.wall);
+        }
+        ConstructionConfig legacy = ConstructionConfig.load(new CompoundTag());
+        assertEquals("minecraft:stone_brick_slab", legacy.foundation);
+        assertEquals("minecraft:stone", legacy.wall);
+    }
+
     @Test void tunnelSideClearanceDefaultsToZeroButPreservesSavedValues() {
         assertEquals(0, new ConstructionConfig().tunnelSideClearance);
         assertEquals(0, ConstructionConfig.load(new CompoundTag()).tunnelSideClearance);

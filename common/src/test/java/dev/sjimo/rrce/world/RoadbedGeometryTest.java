@@ -14,6 +14,7 @@ import net.minecraft.SharedConstants;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.Bootstrap;
 import net.minecraft.world.level.block.SlabBlock;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.properties.SlabType;
 import net.minecraft.world.phys.Vec3;
 import org.junit.jupiter.api.BeforeAll;
@@ -32,6 +33,34 @@ final class RoadbedGeometryTest {
         assertState(config, 64.1875, 63, SlabType.DOUBLE, false);
         assertState(config, 64.8, 63, SlabType.TOP, true);
         assertState(config, 65.2, 64, SlabType.DOUBLE, false);
+    }
+
+    @Test void unsetFoundationKeepsExcavationFootprintButAirPlansClearing() {
+        ConstructionConfig config = new ConstructionConfig();
+        config.resizeLines(1);
+        List<RoadbedGeometry.Sample> samples = List.of(
+            new RoadbedGeometry.Sample(new Vec3(.5, 64.8, .5), new Vec3(1, .1, 0), 0));
+        var solid = RoadbedGeometry.foundationLayout(samples, config, 4);
+        config.foundation = "";
+        var unset = RoadbedGeometry.foundationLayout(samples, config, 4);
+        assertTrue(unset.blocks().isEmpty());
+        assertEquals(solid.floors(), unset.floors());
+        assertEquals(solid.tangents(), unset.tangents());
+        config.foundation = "minecraft:air";
+        var air = RoadbedGeometry.foundationLayout(samples, config, 4);
+        assertEquals(unset.floors(), air.blocks().keySet());
+        assertTrue(air.blocks().values().stream().allMatch(state -> state.is(Blocks.AIR)));
+    }
+
+    @Test void blockMaterialValidationAcceptsOnlyUnsetAirAndSolidBlocks() {
+        assertTrue(ConstructionConfig.isValidBlockMaterial(""));
+        assertTrue(ConstructionConfig.isValidBlockMaterial("  "));
+        assertTrue(ConstructionConfig.isValidBlockMaterial("minecraft:air"));
+        assertTrue(ConstructionConfig.isValidBlockMaterial("minecraft:cave_air"));
+        assertTrue(ConstructionConfig.isValidBlockMaterial("minecraft:stone_brick_slab"));
+        assertFalse(ConstructionConfig.isValidBlockMaterial("minecraft:water"));
+        assertFalse(ConstructionConfig.isValidBlockMaterial("minecraft:does_not_exist"));
+        assertFalse(ConstructionConfig.isValidBlockMaterial("invalid id"));
     }
 
     @Test void curvedRailEndsSweepTheWholeCrossSection() {

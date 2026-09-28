@@ -63,7 +63,7 @@ public final class RoadbedGeometry {
         Map<BlockPos, BlockState> blocks = new HashMap<>();
         Map<BlockPos, Vec3> tangents = new HashMap<>();
         BlockState full = config.foundationState();
-        boolean slab = full.getBlock() instanceof SlabBlock;
+        boolean slab = full != null && full.getBlock() instanceof SlabBlock;
         for (Map.Entry<Long, Double> entry : lowestPaverHeight.entrySet()) {
             int x = (int) (entry.getKey() >> 32), z = (int) (long) entry.getKey();
             double yValue = entry.getValue();
@@ -71,6 +71,8 @@ public final class RoadbedGeometry {
             BlockPos base = new BlockPos(x, y, z);
             floors.add(base);
             tangents.put(base, tangentByColumn.get(entry.getKey()));
+            // Keep the corridor for excavation even when no roadbed is requested.
+            if (full == null) continue;
             // Create's TrackPaver places a lower slab above an upper slab when
             // the track passes through the upper half of a paving level.
             if (slab && yValue - y >= .5) {

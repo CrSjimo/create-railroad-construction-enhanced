@@ -6,7 +6,6 @@ import java.util.List;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
-import net.minecraft.nbt.StringTag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.SlabBlock;
@@ -45,17 +44,27 @@ public final class ConstructionConfig {
     }
 
     public Block foundationBlock() {
-        return BuiltInRegistries.BLOCK.get(dev.sjimo.rrce.platform.GameApi.id(foundation));
+        return foundation.isBlank() ? null : BuiltInRegistries.BLOCK.get(dev.sjimo.rrce.platform.GameApi.id(foundation));
     }
 
     public BlockState foundationState() {
         Block block = foundationBlock();
+        if (block == null) return null;
         BlockState state = block.defaultBlockState();
         return block instanceof SlabBlock ? state.setValue(SlabBlock.TYPE, SlabType.DOUBLE) : state;
     }
 
     public Block wallBlock() {
-        return BuiltInRegistries.BLOCK.get(dev.sjimo.rrce.platform.GameApi.id(wall));
+        return wall.isBlank() ? null : BuiltInRegistries.BLOCK.get(dev.sjimo.rrce.platform.GameApi.id(wall));
+    }
+
+    /** Empty means skip construction; air is an explicit clearing material. */
+    public static boolean isValidBlockMaterial(String id) {
+        if (id.isBlank()) return true;
+        ResourceLocation key = ResourceLocation.tryParse(id);
+        if (key == null || !BuiltInRegistries.BLOCK.containsKey(key)) return false;
+        BlockState state = BuiltInRegistries.BLOCK.get(key).defaultBlockState();
+        return state.isAir() || state.blocksMotion();
     }
 
     public CompoundTag save() {

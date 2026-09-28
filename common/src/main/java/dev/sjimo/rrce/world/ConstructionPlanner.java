@@ -40,9 +40,9 @@ public final class ConstructionPlanner {
         if (points.size() > 64) throw new UserFacingException("error.rrce.too_many_points");
         if (config.spacing < 1 || config.spacing > 32) throw new UserFacingException("error.rrce.invalid_spacing");
         TerrainRules.RuleSet terrainRules = TerrainRules.current();
-        Block foundation = requireSolid(config.foundation, "screen.rrce.field.foundation");
+        requireMaterial(config.foundation, "screen.rrce.field.foundation");
         BlockState foundationState = config.foundationState();
-        Block wall = requireSolid(config.wall, "screen.rrce.field.wall");
+        Block wall = requireMaterial(config.wall, "screen.rrce.field.wall");
         ConstructionPlan plan = new ConstructionPlan();
         Map<BlockPos, BlockState> trackStates = new HashMap<>();
         List<RoadbedGeometry.Sample> samples = new ArrayList<>();
@@ -105,7 +105,7 @@ public final class ConstructionPlanner {
             long column = ((long) below.getX() << 32) ^ (below.getZ() & 0xffffffffL);
             if (supportedColumns.add(column)) {
                 corridor.add(below);
-                foundationBlocks.put(below, foundationState);
+                if (foundationState != null) foundationBlocks.put(below, foundationState);
             }
         }
         Map<BlockPos, Integer> obstacleHeights = new HashMap<>();
@@ -235,24 +235,27 @@ public final class ConstructionPlanner {
                 if (Math.abs(dx) + Math.abs(dz) <= config.tunnelSideClearance) interior.add(floor.offset(dx, 0, dz));
         for (BlockPos floor : interior) {
             if (!level.hasChunkAt(floor)) throw new UserFacingException("error.rrce.chunk_unloaded", floor.toShortString());
-            BlockState base = level.getBlockState(floor);
-            if (config.replaceFoundation && !terrainRules.isRemovable(base, config.allBlocksTerrain))
-                throw new UserFacingException("error.rrce.protected_block", floor.toShortString());
-            if (config.replaceFoundation || base.canBeReplaced()) plan.put(floor, foundationState);
-            else if (!base.isCollisionShapeFullBlock(level, floor))
-                throw new UserFacingException("error.rrce.tunnel_floor_replace_required", floor.toShortString());
+            if (foundationState != null) {
+                BlockState base = level.getBlockState(floor);
+                if (config.replaceFoundation && !terrainRules.isRemovable(base, config.allBlocksTerrain))
+                    throw new UserFacingException("error.rrce.protected_block", floor.toShortString());
+                if (config.replaceFoundation || base.canBeReplaced()) plan.put(floor, foundationState);
+                else if (!base.isCollisionShapeFullBlock(level, floor))
+                    throw new UserFacingException("error.rrce.tunnel_floor_replace_required", floor.toShortString());
+            }
             for (int h = 1; h <= config.tunnelHeight; h++) {
                 BlockPos p = floor.above(h);
                 if (trackCells.contains(p)) continue;
                 ensureRemovable(level, p, config, terrainRules);
                 if (!level.getBlockState(p).isAir()) plan.put(p, Blocks.AIR.defaultBlockState());
             }
-            for (int h = 1; h <= config.roofThickness; h++) {
+            for (int h = 1; wall != null && h <= config.roofThickness; h++) {
                 BlockPos p = floor.above(config.tunnelHeight + h);
                 ensureRemovable(level, p, config, terrainRules);
                 plan.put(p, wall.defaultBlockState());
             }
         }
+        if (wall == null) return;
         for (BlockPos floor : TunnelGeometry.wallColumns(interior, corridor, config.wallThickness)) {
             for (int h = 1; h <= config.tunnelHeight + config.roofThickness; h++) {
                 BlockPos p = floor.above(h);
@@ -285,12 +288,13 @@ public final class ConstructionPlanner {
             throw new UserFacingException("error.rrce.protected_block", p.toShortString());
     }
 
-    private static Block requireSolid(String id, String label) {
+    private static Block requireMaterial(String id, String label) {
+        if (id.isBlank()) return null;
         ResourceLocation key = ResourceLocation.tryParse(id);
         if (key == null || !BuiltInRegistries.BLOCK.containsKey(key))
             throw new UserFacingException("error.rrce.unknown_block", net.minecraft.network.chat.Component.translatable(label), id);
         Block block = BuiltInRegistries.BLOCK.get(key);
-        if (!block.defaultBlockState().blocksMotion())
+        if (!ConstructionConfig.isValidBlockMaterial(id))
             throw new UserFacingException("error.rrce.block_not_solid", net.minecraft.network.chat.Component.translatable(label), id);
         return block;
     }

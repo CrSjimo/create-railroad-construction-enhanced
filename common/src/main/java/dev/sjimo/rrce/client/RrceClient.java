@@ -229,7 +229,7 @@ public final class RrceClient {
                 if (p.distToCenterSqr(camera) > 80 * 80) continue;
                 BlockState state = Block.stateById(states[i]);
                 if (state.isAir()) continue;
-                int category = state.getBlock() instanceof TrackBlock ? 0 : state.is(wallBlock) ? 1 : 2;
+                int category = state.getBlock() instanceof TrackBlock ? 0 : wallBlock != null && state.is(wallBlock) ? 1 : 2;
                 if (category != priority) continue;
                 if (client.level.getBlockState(p).equals(state)) continue;
                 if (client.getBlockRenderer().getBlockModel(state).isCustomRenderer()) continue;
@@ -313,7 +313,7 @@ public final class RrceClient {
                 if (p.distToCenterSqr(camera) > 96 * 96) continue;
                 BlockState state = Block.stateById(states[i]);
                 if (state.isAir()) continue;
-                int category = state.getBlock() instanceof TrackBlock ? 0 : state.is(wallBlock) ? 1 : 2;
+                int category = state.getBlock() instanceof TrackBlock ? 0 : wallBlock != null && state.is(wallBlock) ? 1 : 2;
                 if (category != priority) continue;
                 float red = category == 0 ? .22f : category == 1 ? .65f : .93f;
                 float green = category == 0 ? .85f : category == 1 ? .68f : .69f;

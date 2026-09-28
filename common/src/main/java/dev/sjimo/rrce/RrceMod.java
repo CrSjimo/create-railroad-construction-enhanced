@@ -34,7 +34,6 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
-import net.minecraft.core.registries.BuiltInRegistries;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -268,7 +267,10 @@ public final class RrceMod {
             }))));
         numeric(config, "replaceFoundation", 0, 1, (c, n) -> c.replaceFoundation = n == 1);
         numeric(config, "terrainWork", 0, 1, (c, n) -> c.terrainWork = n == 1);
-        config.then(Commands.literal("foundation").then(Commands.argument("id", StringArgumentType.word())
+        config.then(Commands.literal("foundation").executes(ctx -> run(ctx.getSource(), s -> {
+            SessionManager.get(s.getUUID()).config.foundation = "";
+            sync(s);
+        })).then(Commands.argument("id", StringArgumentType.word())
             .executes(ctx -> run(ctx.getSource(), s -> {
                 ConstructionConfig c = SessionManager.get(s.getUUID()).config;
                 String previous = c.foundation;
@@ -276,7 +278,10 @@ public final class RrceMod {
                 try { validateConfig(c); } catch (RuntimeException error) { c.foundation = previous; throw error; }
                 sync(s);
             }))));
-        config.then(Commands.literal("wall").then(Commands.argument("id", StringArgumentType.word())
+        config.then(Commands.literal("wall").executes(ctx -> run(ctx.getSource(), s -> {
+            SessionManager.get(s.getUUID()).config.wall = "";
+            sync(s);
+        })).then(Commands.argument("id", StringArgumentType.word())
             .executes(ctx -> run(ctx.getSource(), s -> {
                 ConstructionConfig c = SessionManager.get(s.getUUID()).config;
                 String previous = c.wall;
@@ -432,9 +437,7 @@ public final class RrceMod {
 
     private static void validateConfig(ConstructionConfig c) {
         for (String id : new String[] {c.foundation, c.wall}) {
-            ResourceLocation key = ResourceLocation.tryParse(id);
-            if (key == null || !BuiltInRegistries.BLOCK.containsKey(key)
-                || !BuiltInRegistries.BLOCK.get(key).defaultBlockState().blocksMotion())
+            if (!ConstructionConfig.isValidBlockMaterial(id))
                 throw new UserFacingException("error.rrce.invalid_solid_block", id);
         }
         for (String material : c.materials)
